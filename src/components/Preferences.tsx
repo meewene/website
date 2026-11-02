@@ -50,7 +50,7 @@ Preferences.style = css`
 		align-items: center;
 		gap: 0.5rem;
 		min-width: 0;
-		margin: 0;
+		margin: 0 -16px 0 0;
 		padding: 0;
 		border: 0;
 	}
