@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>__TITLE__</title>
+		<meta name="description" content="__DESCRIPTION__" />
+		<link rel="canonical" href="__URL__" />
+		<meta property="og:title" content="__TITLE__" />
+		<meta property="og:description" content="__DESCRIPTION__" />
+		<meta property="og:url" content="__URL__" />
+		<meta property="og:type" content="website" />
+		<meta property="og:image" content="__SITE__/og.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="preload" href="/fonts/DMSans-VF.woff2" as="font" type="font/woff2" crossorigin />
+		<link rel="stylesheet" href="/src/global.css" />
+		<script>
+			(() => {
+				const root = document.documentElement;
+				let reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+				try {
+					const stored = localStorage.getItem("theme") || "system";
+					const dark = stored === "dark" || (stored === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+					root.classList.add(dark ? "dark" : "light");
+					root.style.colorScheme = dark ? "dark" : "light";
+					const motion = localStorage.getItem("motion");
+					if (motion) reduce = motion === "reduce";
+				} catch {}
+				root.classList.toggle("reduce-motion", reduce);
+				const set = (input) => root.dataset.input !== input && (root.dataset.input = input);
+				addEventListener("pointerdown", () => set("pointer"), true);
+				addEventListener("keydown", (e) => !e.metaKey && !e.ctrlKey && set("keyboard"), true);
+				if (reduce) return;
+				root.setAttribute("data-intro-boot", "");
+				setTimeout(() => root.removeAttribute("data-intro-boot"), 1500);
+			})();
+		</script>
+		<!--ssr-head-->
+	</head>
+	<body>
+		<!--ssr-body-->
+		<script type="module" src="/src/main-client.ts"></script>
+	</body>
+</html>
