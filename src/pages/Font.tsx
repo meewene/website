@@ -4,6 +4,7 @@ import { Page } from "../components/Page";
 import { Icon } from "../icons";
 import { play, scratch, unlock } from "../sound";
 import { motion } from "../motion";
+import { onLeave } from "../nav";
 
 const f = config.pages.font;
 const DEFAULT = { weight: 400, opsz: 40, tracking: -0.02 };
@@ -42,8 +43,8 @@ function Lab(this: { axes: Axes; pos: { x: number; y: number }; axis: string; dr
 
 	const move = (e: PointerEvent, burst = false) => {
 		const r = this.pad.getBoundingClientRect();
-		const x = clamp((e.clientX - r.left - r.width / 2) / (r.width / 2 - 24), -1, 1);
-		const y = clamp((e.clientY - r.top - r.height / 2) / (r.height / 2 - 24), -1, 1);
+		const x = clamp((e.clientX - r.left - r.width / 2) / Math.max(1, r.width / 2 - 24), -1, 1);
+		const y = clamp((e.clientY - r.top - r.height / 2) / Math.max(1, r.height / 2 - 24), -1, 1);
 		const m = Math.max(Math.abs(x), Math.abs(y));
 		this.pos = { x, y };
 		if (m < 0.08) this.axis = "";
@@ -144,7 +145,13 @@ function Lab(this: { axes: Axes; pos: { x: number; y: number }; axis: string; dr
 			sparks = sparks.slice(-64);
 			if (!frame) frame = requestAnimationFrame(draw);
 		};
-		new ResizeObserver(size).observe(this.pad);
+		const ro = new ResizeObserver(size);
+		ro.observe(this.pad);
+		onLeave(this.pad, () => {
+			ro.disconnect();
+			cancelAnimationFrame(frame);
+			frame = 0;
+		});
 	};
 
 	const tracking = use(this.axes).map((a) => `${a.tracking.toFixed(3)}em`);
@@ -200,7 +207,7 @@ function Lab(this: { axes: Axes; pos: { x: number; y: number }; axis: string; dr
 						move(e);
 						pointer = null;
 						this.dragging = false;
-						this.pad.releasePointerCapture(e.pointerId);
+						if (this.pad.hasPointerCapture(e.pointerId)) this.pad.releasePointerCapture(e.pointerId);
 					}}
 					on:pointercancel={(e: PointerEvent) => {
 						if (pointer !== e.pointerId) return;
@@ -434,6 +441,9 @@ Lab.style = css`
 	:global(.reduce-motion) .font-pad-handle-dot {
 		transition: none;
 	}
+	:global(.reduce-motion) .font-reset:active {
+		translate: none;
+	}
 `;
 
 function FontBody() {
@@ -608,9 +618,6 @@ FontBody.style = css`
 	}
 	:global(.reduce-motion) .font-character-grid > span {
 		transition: none;
-	}
-	:global(.reduce-motion) .font-reset:active {
-		translate: none;
 	}
 `;
 

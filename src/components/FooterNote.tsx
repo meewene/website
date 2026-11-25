@@ -1,6 +1,7 @@
 import { css } from "dreamland/core";
 import config from "../site.config";
 import { motion } from "../motion";
+import { onLeave } from "../nav";
 
 const clock = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: config.timeZone });
 
@@ -23,13 +24,14 @@ export function FooterNote(this: { quote: HTMLAnchorElement; time: HTMLElement }
 			span.textContent = w;
 			q.append(span);
 		});
+		let io: IntersectionObserver | undefined;
 		if (!motion.reduced) {
 			this.quote.dataset.reveal = "pending";
-			const io = new IntersectionObserver(
+			io = new IntersectionObserver(
 				(entries) => {
 					if (entries.some((e) => e.isIntersecting)) {
 						this.quote.dataset.reveal = "shown";
-						io.disconnect();
+						io?.disconnect();
 					}
 				},
 				{ threshold: 0.5 },
@@ -51,7 +53,7 @@ export function FooterNote(this: { quote: HTMLAnchorElement; time: HTMLElement }
 				this.time.append(span);
 			});
 		};
-		let interval: ReturnType<typeof setInterval>;
+		let interval: ReturnType<typeof setInterval> | undefined;
 		const schedule = () => {
 			clearInterval(interval);
 			const now = new Date();
@@ -62,11 +64,18 @@ export function FooterNote(this: { quote: HTMLAnchorElement; time: HTMLElement }
 			}, 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()));
 		};
 		let timeout = schedule();
-		document.addEventListener("visibilitychange", () => {
+		const onVis = () => {
 			if (document.visibilityState === "visible") {
 				clearTimeout(timeout);
 				timeout = schedule();
 			}
+		};
+		document.addEventListener("visibilitychange", onVis);
+		onLeave(this.quote, () => {
+			io?.disconnect();
+			clearTimeout(timeout);
+			clearInterval(interval);
+			document.removeEventListener("visibilitychange", onVis);
 		});
 	};
 
@@ -245,7 +254,10 @@ FooterNote.style = css`
 	:global(.reduce-motion) .home-link {
 		transition: none;
 	}
-	:global(.reduce-motion) .time :global(.morph) {
+	:global(.reduce-motion) .time :global(.morph),
+	:global(.reduce-motion) .footer-quote[data-reveal] :global(q > span),
+	:global(.reduce-motion) .footer-quote[data-reveal] :global(q::before),
+	:global(.reduce-motion) .footer-quote[data-reveal] :global(q::after) {
 		animation: none;
 	}
 `;

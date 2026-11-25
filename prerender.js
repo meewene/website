@@ -6,13 +6,18 @@ const entry = await import("./.ssr/main-server.js");
 const { config, notFound, routeFor } = entry;
 
 const template = await readFile("dist/index.html", "utf8");
-const escape = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-const head = (route) =>
-	template
+const escape = (s) => s.replace(/\s+/g, " ").trim().replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const head = (route, noindex = false) => {
+	let html = template
 		.replaceAll("__TITLE__", escape(route.title))
 		.replaceAll("__DESCRIPTION__", escape(route.description))
 		.replaceAll("__URL__", config.url + (route.path === "/" ? "/" : route.path))
 		.replaceAll("__SITE__", config.url);
+	if (noindex) {
+		html = html.replace(/\s*<link rel="canonical"[^>]*\/>/, '\n\t\t<meta name="robots" content="noindex" />');
+	}
+	return html;
+};
 
 const write = async (file, html) => {
 	await mkdir(dirname(file), { recursive: true });
@@ -26,7 +31,7 @@ const paths = entry.router.ssgables().map(([route]) => route);
 for (const path of paths) {
 	await write(`dist${path === "/" ? "/index" : path}.html`, await renderSsr(head(routeFor(path)), () => entry.default(path)));
 }
-await write("dist/404.html", await renderSsr(head(notFound), () => entry.default(notFound.path)));
+await write("dist/404.html", await renderSsr(head(notFound, true), () => entry.default(notFound.path)));
 
 const urls = paths.map((p) => `<url>\n<loc>${config.url}${p}</loc>\n</url>`).join("\n");
 await writeFile("dist/sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);

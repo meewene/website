@@ -6,9 +6,19 @@ const system = () => matchMedia("(prefers-reduced-motion: reduce)");
 
 export const motion = createState({ reduced: typeof document !== "undefined" && root().classList.contains("reduce-motion") });
 
+const listeners = new Set<(reduced: boolean) => void>();
+
+export const onMotionChange = (fn: (reduced: boolean) => void) => {
+	listeners.add(fn);
+	return () => {
+		listeners.delete(fn);
+	};
+};
+
 const apply = (reduced: boolean) => {
 	root().classList.toggle("reduce-motion", reduced);
 	motion.reduced = reduced;
+	for (const fn of listeners) fn(reduced);
 };
 
 export const toggleMotion = () => {

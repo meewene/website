@@ -15,6 +15,14 @@ const slugify = (text: string) =>
 const dateLabel = (date: string) =>
 	date ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(date)) : "";
 
+const decodeEntities = (text: string) =>
+	text
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;|&apos;/g, "'");
+
 const markdown = {
 	name: "markdown",
 	transform(src: string, id: string) {
@@ -28,13 +36,17 @@ const markdown = {
 			else if (i > 0) meta[(key = line.slice(0, i).trim())] = line.slice(i + 1).trim().replace(/^["']|["']$/g, "").replace(/^\|$/, "");
 		}
 		const headings: { id: string; text: string }[] = [];
+		const seen = new Map<string, number>();
 		const marked = new Marked({
 			breaks: true,
 			renderer: {
 				heading({ tokens, depth }) {
 					const text = this.parser.parseInline(tokens);
-					const id = slugify(text);
-					if (depth === 2) headings.push({ id, text: text.replace(/<[^>]+>/g, "") });
+					const base = slugify(text) || "section";
+					const count = seen.get(base) ?? 0;
+					seen.set(base, count + 1);
+					const id = count ? `${base}-${count + 1}` : base;
+					if (depth === 2) headings.push({ id, text: decodeEntities(text.replace(/<[^>]+>/g, "")) });
 					return `<h${depth} id="${id}">${text}</h${depth}>`;
 				},
 			},

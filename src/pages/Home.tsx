@@ -181,13 +181,14 @@ Home.style = css`
 		--viewport-padding: 1.5rem;
 		display: grid;
 		grid-template-columns: 1fr min(var(--page-column), 100%) 1fr;
-		grid-template-rows: auto 1fr;
+		grid-template-rows: auto 1fr auto;
 		min-height: 100svh;
 		padding-inline: var(--viewport-padding);
 		padding-top: var(--site-top-offset);
 	}
 	:scope > * {
 		grid-column: 2;
+		min-width: 0;
 	}
 	.home-header {
 		position: relative;

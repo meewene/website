@@ -1,8 +1,9 @@
 import { css } from "dreamland/core";
 import config from "../site.config";
 import { Icon } from "../icons";
-import { intro } from "../intro";
-import { motion } from "../motion";
+import { intro, onIntroPhase } from "../intro";
+import { motion, onMotionChange } from "../motion";
+import { onLeave } from "../nav";
 import { play } from "../sound";
 
 const COLORS = ["#838383", "#FFF", "#E4E4E4", "#FFF", "#BABABA", "#aaa"];
@@ -12,12 +13,26 @@ export const mask = `mask-image: url(${config.brand.black.href}); -webkit-mask-i
 const tween = (duration: number, delay: number, easing: string, update: (t: number) => void) => {
 	const effect = new KeyframeEffect(null, null, { duration, delay, easing, fill: "forwards" });
 	const anim = new Animation(effect);
+	let stopped = false;
 	let frame = requestAnimationFrame(function step() {
+		if (stopped) return;
 		update(effect.getComputedTiming().progress ?? 0);
 		if (anim.playState !== "finished") frame = requestAnimationFrame(step);
 	});
 	anim.play();
-	return { done: anim.finished.then(() => update(1)), stop: () => (cancelAnimationFrame(frame), anim.cancel()) };
+	return {
+		done: anim.finished.then(
+			() => {
+				if (!stopped) update(1);
+			},
+			() => {},
+		),
+		stop: () => {
+			stopped = true;
+			cancelAnimationFrame(frame);
+			anim.cancel();
+		},
+	};
 };
 
 export const copySvg = async (href: string) => {
@@ -161,6 +176,7 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 		closeMenu();
 		if (this.busy) return;
 		this.busy = true;
+		this.error = false;
 		clearTimeout(timer);
 		this.message = `copying ${asset.label.toLowerCase()} svg…`;
 		try {
@@ -181,10 +197,11 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 		if (!el) return;
 		menuEl = null;
 		el.setAttribute("data-ending-style", "");
-		setTimeout(() => el.remove(), 240);
+		setTimeout(() => el.remove(), parseFloat(getComputedStyle(el).transitionDuration) * 1000);
 		removeEventListener("pointerdown", outside, true);
 		removeEventListener("keydown", keys, true);
 		removeEventListener("scroll", closeMenu, true);
+		removeEventListener("routechange", closeMenu);
 	};
 	const outside = (e: Event) => {
 		if (menuEl && !menuEl.contains(e.target as Node)) closeMenu();
@@ -206,15 +223,19 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 		e.preventDefault();
 		pressed = true;
 		closeMenu();
-		const x = Math.min(e.clientX, innerWidth - 232);
-		const el = <LogoMenu x={x} y={e.clientY + 8} close={closeMenu} copy={copy} />;
+		const el = <LogoMenu x={0} y={0} close={closeMenu} copy={copy} />;
 		menuEl = el;
 		document.body.append(el);
+		const x = Math.max(8, Math.min(e.clientX, innerWidth - el.offsetWidth - 8));
+		const y = Math.max(8, Math.min(e.clientY + 8, innerHeight - el.offsetHeight - 8));
+		el.style.left = `${x}px`;
+		el.style.top = `${y}px`;
 		requestAnimationFrame(() => el.removeAttribute("data-starting-style"));
 		(el.querySelector(".item") as HTMLElement).focus({ preventScroll: true });
 		addEventListener("pointerdown", outside, true);
 		addEventListener("keydown", keys, true);
 		addEventListener("scroll", closeMenu, true);
+		addEventListener("routechange", closeMenu);
 	};
 	const keyMenu = (e: KeyboardEvent) => {
 		pressed = false;
@@ -237,14 +258,18 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 		let hovering = false;
 		let done = false;
 		let busy = false;
+		let disposed = false;
 		let shader: any;
-		const speed = () => shader?.setSpeed(!motion.reduced && inView && tabVisible && done && !busy && hovering ? 4 : 0);
-		new IntersectionObserver(([e]) => ((inView = e.isIntersecting), speed()), { threshold: 0.1 }).observe(this.link);
-		document.addEventListener("visibilitychange", () => ((tabVisible = document.visibilityState === "visible"), speed()));
+		let activeTween: ReturnType<typeof tween> | undefined;
+		const speed = () => !disposed && shader?.setSpeed(!motion.reduced && inView && tabVisible && done && !busy && hovering ? 4 : 0);
+		const io = new IntersectionObserver(([e]) => ((inView = e.isIntersecting), speed()), { threshold: 0.1 });
+		io.observe(this.link);
+		const onVis = () => ((tabVisible = document.visibilityState === "visible"), speed());
+		document.addEventListener("visibilitychange", onVis);
 		this.link.addEventListener("pointerenter", () => ((hovering = true), speed()));
 		this.link.addEventListener("pointerleave", () => ((hovering = false), speed()));
 		const settle = () => {
-			if (done || !shader) return;
+			if (disposed || done || !shader) return;
 			if (motion.reduced || intro.phase === "skipped" || !inView || !tabVisible) {
 				done = true;
 				this.host.style.opacity = "1";
@@ -252,6 +277,7 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 			}
 			if (intro.phase !== "complete") return;
 			requestAnimationFrame(() => {
+				if (disposed || !shader) return;
 				done = true;
 				busy = true;
 				this.host.style.opacity = "1";
@@ -265,16 +291,19 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 					],
 					{ duration: 1140, easing: "cubic-bezier(0.4, 0, 0.2, 1)" },
 				);
-				tween(1000, 140, "cubic-bezier(0.65, 0, 0.35, 1)", (t) => shader.setFrame(start + 2000 * t)).done.then(() => {
+				activeTween = tween(1000, 140, "cubic-bezier(0.65, 0, 0.35, 1)", (t) => !disposed && shader?.setFrame(start + 2000 * t));
+				activeTween.done.then(() => {
 					busy = false;
 					speed();
 				});
 			});
 		};
-		use(intro.phase).listen(settle);
-		use(motion.reduced).listen(speed);
-		setTimeout(async () => {
+		const unsubIntro = onIntroPhase(settle);
+		const unsubMotion = onMotionChange(speed);
+		const bootTimer = setTimeout(async () => {
+			if (disposed) return;
 			const { ShaderMount, meshGradientFragmentShader, getShaderColorFromString } = await import("@paper-design/shaders");
+			if (disposed || !this.host.isConnected) return;
 			shader = new ShaderMount(
 				this.host,
 				meshGradientFragmentShader,
@@ -303,6 +332,19 @@ export function Logo(this: { host: HTMLElement; halo: HTMLElement; link: HTMLEle
 			);
 			settle();
 		}, 1200);
+		onLeave(this.link, () => {
+			disposed = true;
+			clearTimeout(bootTimer);
+			clearTimeout(timer);
+			activeTween?.stop();
+			closeMenu();
+			io.disconnect();
+			document.removeEventListener("visibilitychange", onVis);
+			unsubIntro();
+			unsubMotion();
+			shader?.dispose();
+			shader = undefined;
+		});
 	};
 
 	return (

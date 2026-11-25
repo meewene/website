@@ -5,12 +5,18 @@ import { unlock } from "./sound";
 import { watchSystemTheme } from "./theme";
 import { watchSystemMotion } from "./motion";
 import { selectionInk } from "./ink";
-import { clean } from "./routes";
+import { clean, notFound, routeFor } from "./routes";
 
 startNavigation();
 const root = document.querySelector<HTMLElement>("#app")!;
-if (root.dataset.path === clean(location.pathname)) hydrate(App, root, document.head, document.querySelector("[dlssr-d]")!);
-else root.replaceWith(App());
+const currentPath = clean(location.pathname);
+const matchesSsr = root.dataset.path === currentPath || (root.dataset.path === notFound.path && routeFor(currentPath) === notFound);
+const ssrData = document.querySelector("[dlssr-d]");
+if (matchesSsr && ssrData) hydrate(App, root, document.head, ssrData);
+else {
+	document.head.querySelectorAll("style[dlssri]").forEach((s) => s.remove());
+	root.replaceWith(App());
+}
 
 const prime = () => {
 	if (unlock()) for (const type of ["pointerdown", "pointerup", "keydown"]) removeEventListener(type, prime);

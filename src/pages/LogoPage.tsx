@@ -4,7 +4,8 @@ import { Page } from "../components/Page";
 import { copySvg, mask, MARK } from "../components/Logo";
 import { Icon } from "../icons";
 import { play } from "../sound";
-import { motion } from "../motion";
+import { motion, onMotionChange } from "../motion";
+import { onLeave } from "../nav";
 
 const l = config.pages.logo;
 const WHITE = config.brand.white;
@@ -54,10 +55,14 @@ function Hero(this: { mode: number; host: HTMLElement }, cx: any) {
 	let shader: any;
 	let hovering = false;
 	let visible = true;
+	let disposed = false;
+	let run = 0;
 	let ptr = [0.5, 0.5];
-	const speed = () => shader?.setSpeed(motion.reduced || !visible || document.hidden ? 0 : hovering && this.mode === 0 ? 4 : 1);
+	const speed = () => !disposed && shader?.setSpeed(motion.reduced || !visible || document.hidden ? 0 : hovering && this.mode === 0 ? 4 : 1);
 	const start = async () => {
+		const seq = ++run;
 		const { ShaderMount, meshGradientFragmentShader, getShaderColorFromString } = await import("@paper-design/shaders");
+		if (disposed || seq !== run || !this.host.isConnected) return;
 		shader?.dispose();
 		const id = l.modes[this.mode].id;
 		shader =
@@ -68,7 +73,7 @@ function Hero(this: { mode: number; host: HTMLElement }, cx: any) {
 	};
 	const at = (e: PointerEvent) => {
 		const r = this.host.getBoundingClientRect();
-		return [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height];
+		return [(e.clientX - r.left) / (r.width || 1), 1 - (e.clientY - r.top) / (r.height || 1)];
 	};
 	const pick = (i: number) => {
 		play("select");
@@ -77,13 +82,22 @@ function Hero(this: { mode: number; host: HTMLElement }, cx: any) {
 		start();
 	};
 	cx.mount = () => {
-		use(motion.reduced).listen(speed);
-		new IntersectionObserver(([e]) => {
+		const unsubMotion = onMotionChange(speed);
+		const io = new IntersectionObserver(([e]) => {
 			visible = e.isIntersecting;
 			speed();
-		}).observe(this.host);
+		});
+		io.observe(this.host);
 		document.addEventListener("visibilitychange", speed);
 		start();
+		onLeave(this.host, () => {
+			disposed = true;
+			unsubMotion();
+			io.disconnect();
+			document.removeEventListener("visibilitychange", speed);
+			shader?.dispose();
+			shader = undefined;
+		});
 	};
 	return (
 		<section data-intro="true" aria-labelledby="logo-hero-title">
@@ -213,10 +227,13 @@ Hero.style = css`
 	}
 `;
 
-function Files(this: { message: string; busy: boolean }) {
+function Files(this: { message: string; busy: boolean }, cx: any) {
 	this.message = "";
 	this.busy = false;
-	let timer: ReturnType<typeof setTimeout>;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	cx.mount = () => {
+		onLeave(cx.root, () => clearTimeout(timer));
+	};
 	const copy = async () => {
 		if (this.busy) return;
 		this.busy = true;

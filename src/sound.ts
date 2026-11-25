@@ -24,24 +24,40 @@ export type Cue = keyof typeof cues;
 
 export const sound = createState({ enabled: true, volume: 0.7 });
 
+const soundListeners = new Set<() => void>();
+
+export const onSoundChange = (fn: () => void) => {
+	soundListeners.add(fn);
+	return () => {
+		soundListeners.delete(fn);
+	};
+};
+
 export const cueLength = (cue: Cue) => {
 	const [, at, , decay = 0.24] = cues[cue].at(-1)!;
 	return Math.round(1000 * (at + 0.03 + decay / 4 + 3 * 0.28 + 0.06));
 };
 
 let ctx: AudioContext | undefined;
-let playing: { input: GainNode; src: OscillatorNode[] } | undefined;
+let bus: { dry: GainNode; wet: GainNode; softWave: PeriodicWave } | undefined;
+let playing: { input: GainNode; src: OscillatorNode[]; dispose: () => void; cleanup: ReturnType<typeof setTimeout> } | undefined;
 
 const context = (): AudioContext | undefined => {
 	if (!ctx) {
+		if (typeof AudioContext === "undefined") return;
 		if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
-		ctx = new AudioContext();
+		try {
+			ctx = new AudioContext();
+		} catch {
+			return;
+		}
 	}
-	if (ctx.state === "suspended") ctx.resume();
+	if (ctx.state === "suspended") ctx.resume().catch(() => {});
 	return ctx;
 };
 
-const chain = (c: AudioContext) => {
+const masterBus = (c: AudioContext) => {
+	if (bus) return bus;
 	const comp = c.createDynamicsCompressor();
 	comp.threshold.value = -20;
 	comp.knee.value = 12;
@@ -65,6 +81,16 @@ const chain = (c: AudioContext) => {
 	const wet = c.createGain();
 	dry.gain.value = 0.88;
 	wet.gain.value = 0.12;
+	dry.connect(comp);
+	wet.connect(reverb).connect(comp);
+	const softImag = new Float32Array([0, 1, 0.1, 0.025]);
+	const softWave = c.createPeriodicWave(new Float32Array(softImag.length), softImag);
+	bus = { dry, wet, softWave };
+	return bus;
+};
+
+const chain = (c: AudioContext) => {
+	const { dry, wet } = masterBus(c);
 	const delay = c.createDelay();
 	delay.delayTime.value = 0.28;
 	const lp = c.createBiquadFilter();
@@ -73,16 +99,24 @@ const chain = (c: AudioContext) => {
 	const echo = c.createGain();
 	echo.gain.value = 0.14;
 	const input = c.createGain();
-	input.connect(dry).connect(comp);
-	input.connect(wet).connect(reverb).connect(comp);
+	input.connect(dry);
+	input.connect(wet);
 	input.connect(delay).connect(lp).connect(echo).connect(input);
-	return input;
+	let freed = false;
+	const dispose = () => {
+		if (freed) return;
+		freed = true;
+		input.disconnect();
+		delay.disconnect();
+		lp.disconnect();
+		echo.disconnect();
+	};
+	return { input, dispose };
 };
 
-const voice = (c: AudioContext, input: AudioNode, t: number, freq: number, harmonics: number[], gain: number, attack: number, decay: number, filter?: [number, number]) => {
-	const imag = new Float32Array([0, ...harmonics]);
+const voice = (c: AudioContext, input: AudioNode, t: number, freq: number, wave: PeriodicWave, gain: number, attack: number, decay: number, filter?: [number, number]) => {
 	const osc = c.createOscillator();
-	osc.setPeriodicWave(c.createPeriodicWave(new Float32Array(imag.length), imag));
+	osc.setPeriodicWave(wave);
 	osc.frequency.setValueAtTime(freq, t);
 	const env = c.createGain();
 	env.gain.setValueAtTime(1e-4, t);
@@ -108,17 +142,23 @@ export const unlock = () => context();
 
 export const stop = () => {
 	if (!playing || !ctx) return;
+	const current = playing;
+	playing = undefined;
+	clearTimeout(current.cleanup);
 	const now = ctx.currentTime;
-	playing.input.gain.setTargetAtTime(1e-4, now, 0.025 / 3);
-	for (const o of playing.src) {
+	current.input.gain.setTargetAtTime(1e-4, now, 0.025 / 3);
+	for (const o of current.src) {
 		try {
 			o.stop(now + 0.075);
 		} catch {}
 	}
-	playing = undefined;
+	setTimeout(current.dispose, 150);
 };
 
-stateListen(sound, stop);
+stateListen(sound, () => {
+	stop();
+	for (const fn of soundListeners) fn();
+});
 
 let lastHover = -Infinity;
 
@@ -131,20 +171,32 @@ export const hoverAllowed = () => {
 
 export const play = (cue: Cue) => {
 	if (!sound.enabled || !sound.volume) return "muted";
-	const c = typeof AudioContext === "undefined" ? undefined : context();
+	const c = context();
 	if (!c) return "unavailable";
 	stop();
 	const now = c.currentTime;
-	const input = chain(c);
+	const { softWave } = masterBus(c);
+	const { input, dispose } = chain(c);
 	const src: OscillatorNode[] = [];
 	for (const [f, at, v, decay = 0.24] of cues[cue]) {
 		const t = now + at;
+		const mainImag = new Float32Array([0, 1, 0.2 + 0.1 * v, 0.07, 0.02, 0.004]);
+		const mainWave = c.createPeriodicWave(new Float32Array(mainImag.length), mainImag);
 		src.push(
-			voice(c, input, t, f, [1, 0.2 + 0.1 * v, 0.07, 0.02, 0.004], 0.06 * v * sound.volume, 0.03, decay, [Math.max(560, 1.15 * f), Math.min(2000, f * (2.1 + v))]),
-			voice(c, input, t, 1.003 * f, [1, 0.1, 0.025], 0.013 * v * sound.volume, 0.06, decay * 0.8),
+			voice(c, input, t, f, mainWave, 0.06 * v * sound.volume, 0.03, decay, [Math.max(560, 1.15 * f), Math.min(2000, f * (2.1 + v))]),
+			voice(c, input, t, 1.003 * f, softWave, 0.013 * v * sound.volume, 0.06, decay * 0.8),
 		);
 	}
-	playing = { input, src };
+	const handle = {
+		input,
+		src,
+		dispose,
+		cleanup: setTimeout(() => {
+			dispose();
+			if (playing === handle) playing = undefined;
+		}, cueLength(cue) + 1200),
+	};
+	playing = handle;
 	return "played";
 };
 
@@ -183,6 +235,7 @@ export const scratch = (x: number, y: number, speed: number, reverse: boolean) =
 	env.gain.linearRampToValueAtTime(0.19 * sound.volume, t + 0.006);
 	env.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
 	src.connect(lp).connect(env).connect(ctx.destination);
-	src.start(t, (x + 1) * 0.1, 0.12);
+	const offset = Math.max(0, Math.min(0.28, (x + 1) * 0.1));
+	src.start(t, offset, 0.12);
 	src.stop(t + 0.105);
 };

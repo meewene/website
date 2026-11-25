@@ -2,9 +2,9 @@ import { css } from "dreamland/core";
 import config from "../site.config";
 import { Page } from "../components/Page";
 
-function Lost(this: { path: HTMLElement }, cx: any) {
+function Lost(this: { path: HTMLElement; slug: HTMLElement }, cx: any) {
 	cx.mount = () => {
-		this.path.firstChild!.nextSibling!.textContent = location.pathname;
+		this.slug.textContent = location.pathname;
 		requestAnimationFrame(() => this.path.setAttribute("data-ready", ""));
 	};
 	return (
@@ -12,7 +12,8 @@ function Lost(this: { path: HTMLElement }, cx: any) {
 				<p data-intro="true" class="lost-route">
 					<span class="host">{config.host}</span>
 					<del class="lost-route-path" this={use(this.path)}>
-						<span class="sr-only">missing address: </span>/
+						<span class="sr-only">missing address: </span>
+						<span this={use(this.slug)}>/</span>
 						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true">
 							<path d="M1 7 C 25 4, 60 9, 99 5" pathLength="1" />
 						</svg>
@@ -81,11 +82,16 @@ Lost.style = css`
 		stroke-linecap: round;
 		vector-effect: non-scaling-stroke;
 		stroke-dasharray: 1;
-		stroke-dashoffset: 1px;
+		stroke-dashoffset: 1;
 	}
 	.lost-route-path[data-ready] :global(path) {
 		stroke-dashoffset: 0;
 		transition: stroke-dashoffset 0.48s var(--control-ease) 0.4s;
+	}
+	@media (scripting: none) {
+		.lost-route-path :global(path) {
+			stroke-dashoffset: 0;
+		}
 	}
 	.bold {
 		font-weight: 700;

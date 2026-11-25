@@ -10,7 +10,7 @@ export default {
 	bio: "a lazy teenager who speaks to computers and makes them do cool things (i write code)",
 	city: "paris",
 	location: "paris, france",
-	timeZone: "CET",
+	timeZone: "Europe/Paris",
 	email: "hello@mewn.dog",
 	handle: "meewene",
 	shortHandle: "mewn",
@@ -26,8 +26,7 @@ export default {
 	home: {
 		moreAbout: "more about me",
 		work: [
-			{ title: "serenade", description: "custom discord client for android, \"discord but make it great\"", href: "https://github.com/meewene/Serenade" },
-			{ title: "github", description: "the rest of my projects live here, come take a look.", href: github },
+			{ title: "github", description: "my projects live here, come take a look.", href: github },
 		],
 		contact: "if something here made you curious, or you just want to say hi, write to me.",
 	},
@@ -36,7 +35,6 @@ export default {
 		notFound: { title: "page not found", description: "there is nothing at this address" },
 		sounds: {
 			title: "interface sounds",
-			row: "every interface sound on this site, in one place.",
 			description: "soft piano notes with a faint echo, synthesized in your browser",
 			groups: [
 				{ label: "feedback", cues: ["success", "failure", "warning", "error", "notification"] },
@@ -139,7 +137,7 @@ export default {
 					heading: "email and questions",
 					blocks: [
 						"when you email me, i get your email address and your message. i use that to read and reply to you. i reserve the right to share your email contents and address in any way, whether privately or publicly.",
-						"your email is being forwarded it to my gmail inbox, where google stores it. my replies go out through smtp2go, which keeps their headers, such as your address and the subject, for 35 days.",
+						"your email is forwarded to my gmail inbox, where google stores it. my replies go out through smtp2go, which keeps their headers, such as your address and the subject, for 35 days.",
 						{ links: [{ label: "google's privacy policy", href: "https://policies.google.com/privacy" }, { label: "smtp2go's privacy policy", href: "https://www.smtp2go.com/privacy/" }] },
 					],
 				},
@@ -176,7 +174,7 @@ export default {
 			spacing: { title: "spacing", lead: "pages use 32px between groups, 16px between a heading and its content, and 8px between a title and its description." },
 			shape: { title: "shape and elevation" },
 			motion: { title: "motion", lead: ["every duration uses the same expo-out curve,", ", so changes start quickly and settle gently. anything under 100ms reads as instant; 200–300ms feels responsive without drawing attention."], compare: "compare durations", reduced: "less motion is on, so every duration resolves to 0ms." },
-			focus: { title: "focus and access", text: ["focus shows a 1px outline in the ring color, offset by 2px. it fades in over the control duration and becomes the system highlight in forced-colors mode. press tab on this page to see it.", "controls are at least 48px in both directions. interactive studies keep their motion local, and less motion skips page entrances."] },
+			focus: { title: "focus and access", text: ["focus shows a 2px outline in the ring color, offset by 4px. it fades in over the control duration and becomes the system highlight in forced-colors mode. press tab on this page to see it.", "controls are at least 48px in both directions. interactive studies keep their motion local, and less motion skips page entrances."] },
 			components: {
 				title: "components",
 				lead: ["dreamland components in", ", styled with the shared control, field, and popup styles."],
@@ -283,7 +281,7 @@ export default {
 			usage: {
 				title: "usage",
 				do: ["use the svg files as they are.", "put the white mark on dark backgrounds.", "use the black mark on light backgrounds and paper.", "keep half the mark's width clear on every side.", "link to mewn.dog when you mention my work."],
-				dont: ["don't stretch the mark or fill in the 8.", "don't add color to it. use the white or the black.", "don't add shadows, outlines, or strokes.", "don't put it on busy photos or patterns.", "use it in a way that implies endorsement."],
+				dont: ["don't stretch the mark or fill in the 8.", "don't add color to it. use the white or the black.", "don't add shadows, outlines, or strokes.", "don't put it on busy photos or patterns.", "don't use it in a way that implies endorsement."],
 				note: "the logo files are free to use when referring to me or my work. fonts are separate licenses.",
 			},
 			related: {

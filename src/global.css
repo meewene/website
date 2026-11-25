@@ -164,6 +164,27 @@
 	--brand-c: #e4e4e4;
 }
 
+@media (scripting: none) and (prefers-color-scheme: dark) {
+	:root {
+		color-scheme: dark;
+		--background: #0a0a0a;
+		--backdrop: #0a1423, #121e33, #1e2240, #1b2f46, #16162e;
+		--foreground: var(--color-neutral-50);
+		--link: var(--color-neutral-50);
+		--card: var(--color-neutral-900);
+		--primary: var(--color-blue-400);
+		--primary-foreground: var(--color-neutral-950);
+		--muted: var(--color-neutral-900);
+		--muted-foreground: var(--color-neutral-400);
+		--destructive: var(--color-red-400);
+		--border: var(--color-neutral-800);
+		--smooth-ring-color: #ffffff2e;
+		--brand-a: #bababa;
+		--brand-b: #fff;
+		--brand-c: #e4e4e4;
+	}
+}
+
 .reduce-motion {
 	--focus-transition: outline-color 0s;
 	--focus-in-duration: 0s;

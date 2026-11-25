@@ -1,11 +1,14 @@
 import { css } from "dreamland/core";
 import config from "../site.config";
-import type { Post as Info } from "../content";
+import { posts, type Post as Info } from "../content";
 import { Icon } from "../icons";
+import { onLeave } from "../nav";
 import { Page, SharedTitle } from "../components/Page";
 
-function Contents(this: { post: Info; desktop: boolean }, cx: any) {
-	const post = this.post;
+const postBySlug = (slug: string) => posts.find((p) => p.slug === slug)!;
+
+function Contents(this: { slug: string; desktop: boolean }, cx: any) {
+	const post = postBySlug(this.slug);
 	cx.mount = () => {
 		if (!this.desktop) return;
 		const nav = cx.root as HTMLElement;
@@ -23,6 +26,7 @@ function Contents(this: { post: Info; desktop: boolean }, cx: any) {
 		};
 		addEventListener("scroll", update, { passive: true });
 		requestAnimationFrame(update);
+		onLeave(nav, () => removeEventListener("scroll", update));
 	};
 	return (
 		<nav data-intro="true" class={`article-contents ${this.desktop ? "desktop" : "mobile"}`} aria-label="on this page" data-scrolled="false">
@@ -46,11 +50,12 @@ function Contents(this: { post: Info; desktop: boolean }, cx: any) {
 	);
 }
 
-function Article(this: { post: Info }) {
+function Article(this: { slug: string }) {
+	const post = postBySlug(this.slug);
 	return (
 		<article id="article" aria-labelledby="article-title">
 			<div class="article-body">
-				<div data-intro-group="true" class="blog-prose page-prose" attr:innerHTML={this.post.html} />
+				<div data-intro-group="true" class="blog-prose page-prose" attr:innerHTML={post.html} />
 			</div>
 			<footer data-intro="true" class="article-signoff">
 				<p>{config.name}</p>
@@ -71,8 +76,8 @@ export const Post = (post: Info) => (
 				<h1 id="article-title" data-intro="true" class="page-title">
 					{SharedTitle(post.title, `title-post-${post.slug}`)}
 				</h1>
-				{post.headings.length ? <Contents post={post} desktop={true} /> : null}
-				{post.headings.length ? <Contents post={post} desktop={false} /> : null}
+				{post.headings.length ? <Contents slug={post.slug} desktop={true} /> : null}
+				{post.headings.length ? <Contents slug={post.slug} desktop={false} /> : null}
 				<p data-intro="true" class="page-description">
 					{post.description}
 				</p>
@@ -86,7 +91,7 @@ export const Post = (post: Info) => (
 			</div>
 		}
 	>
-		<Article post={post} />
+		<Article slug={post.slug} />
 	</Page>
 );
 
@@ -163,7 +168,8 @@ Contents.style = css`
 			display: none;
 		}
 	}
-	:global(.reduce-motion) .article-contents-link {
+	:global(.reduce-motion) .article-contents-link,
+	:global(.reduce-motion) .article-contents-title {
 		transition: none;
 	}
 `;

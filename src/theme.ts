@@ -3,7 +3,7 @@ import { motion } from "./motion";
 
 const root = () => document.documentElement;
 
-const isDark =() => root().classList.contains("dark");
+const isDark = () => root().classList.contains("dark");
 
 const apply = (dark: boolean) => {
 	root().classList.remove("light", "dark");
@@ -11,14 +11,19 @@ const apply = (dark: boolean) => {
 	root().style.colorScheme = dark ? "dark" : "light";
 };
 
-const setTheme =(dark: boolean) => {
+let seq = 0;
+
+const setTheme = (dark: boolean) => {
 	play(dark ? "toggle-on" : "toggle-off");
 	try {
 		localStorage.setItem("theme", dark ? "dark" : "light");
 	} catch {}
 	if (!document.startViewTransition || motion.reduced) return apply(dark);
+	const id = ++seq;
 	root().dataset.themeTransition = "";
-	const done = () => delete root().dataset.themeTransition;
+	const done = () => {
+		if (id === seq) delete root().dataset.themeTransition;
+	};
 	document.startViewTransition(() => apply(dark)).finished.then(done, done);
 };
 

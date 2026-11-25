@@ -4,7 +4,7 @@ import { motion } from "../motion";
 
 const GRADIENT = { u_distortion: 0.5, u_swirl: 0.1, u_grainMixer: 0, u_grainOverlay: 0, u_fit: 2, u_rotation: 0, u_scale: 1, u_offsetX: 0, u_offsetY: 0, u_originX: 0.5, u_originY: 0.5, u_worldWidth: 0, u_worldHeight: 0 };
 
-const SKIP = '#main-content, :is(main, h1, h2, h3, h4, h5, h6)[tabindex="-1"], textarea, select, [contenteditable]:not([contenteditable="false"]), [data-focus-native], input:not([type="button"], [type="checkbox"], [type="radio"], [type="range"], [type="reset"], [type="submit"], [type="color"])';
+const SKIP = '#main-content, :is(main, h1, h2, h3, h4, h5, h6)[tabindex="-1"], dialog[open] *, textarea, select, [contenteditable]:not([contenteditable="false"]), [data-focus-native], input:not([type="button"], [type="checkbox"], [type="radio"], [type="range"], [type="reset"], [type="submit"], [type="color"])';
 
 const num = (v: string) => Number.parseFloat(v) || 0;
 
@@ -97,6 +97,7 @@ const focusRing = (svg: SVGElement) => {
 	addEventListener("resize", retrack);
 	document.addEventListener("transitionrun", retrack, true);
 	document.addEventListener("animationstart", retrack, true);
+	addEventListener("routechange", update);
 	update();
 };
 
@@ -104,7 +105,8 @@ const scrollBlur = (top: HTMLElement, bottom: HTMLElement) => {
 	let frame = 0;
 	const update = () => {
 		frame = 0;
-		const left = Math.max(0, document.body.offsetHeight - innerHeight - scrollY);
+		const docHeight = Math.max(document.documentElement.scrollHeight, document.body.offsetHeight);
+		const left = Math.max(0, docHeight - innerHeight - scrollY);
 		top.style.opacity = String(Math.min(1, Math.max(0, scrollY) / 64));
 		bottom.style.opacity = String(Math.min(1, left / 64));
 	};
@@ -114,6 +116,7 @@ const scrollBlur = (top: HTMLElement, bottom: HTMLElement) => {
 	update();
 	addEventListener("scroll", schedule, { passive: true });
 	addEventListener("resize", schedule);
+	addEventListener("routechange", schedule);
 	new ResizeObserver(schedule).observe(document.body);
 };
 
@@ -122,13 +125,18 @@ const backdrop = (host: HTMLElement) => {
 	let shader: Promise<any> | undefined;
 	const load = async () => {
 		const { ShaderMount, meshGradientFragmentShader, getShaderColorFromString } = await import("@paper-design/shaders");
-		const palette = () => getComputedStyle(root).getPropertyValue("--backdrop").split(",").map((c) => getShaderColorFromString(c.trim()));
-		let colors = palette();
+		const rawPalette = () => getComputedStyle(root).getPropertyValue("--backdrop").trim();
+		const parsePalette = (raw: string) => raw.split(",").map((c) => getShaderColorFromString(c.trim()));
+		let lastRaw = rawPalette();
+		let colors = parsePalette(lastRaw);
 		let frame = 0;
 		const mount = new ShaderMount(host, meshGradientFragmentShader, { u_colors: colors, u_colorsCount: colors.length, ...GRADIENT }, undefined, 0, 0, 1, 320 * 200);
 		new MutationObserver(() => {
+			const nextRaw = rawPalette();
+			if (nextRaw === lastRaw) return;
+			lastRaw = nextRaw;
 			const from = colors;
-			const to = palette();
+			const to = parsePalette(nextRaw);
 			const start = performance.now();
 			cancelAnimationFrame(frame);
 			const step = (now: number) => {
@@ -145,9 +153,10 @@ const backdrop = (host: HTMLElement) => {
 	const sync = () => {
 		if (motion.reduced && !shader) return;
 		shader ??= load();
-		shader.then((s) => s.setSpeed(motion.reduced ? 0 : 0.2), () => {});
+		shader.then((s) => s.setSpeed(motion.reduced || document.hidden ? 0 : 0.2), () => {});
 	};
 	use(motion.reduced).listen(sync);
+	document.addEventListener("visibilitychange", sync);
 	sync();
 };
 

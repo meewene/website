@@ -4,6 +4,7 @@ import { Page } from "../components/Page";
 import { copySvg, MARK } from "../components/Logo";
 import { Icon } from "../icons";
 import { play } from "../sound";
+import { onLeave } from "../nav";
 
 const b = config.pages.brand;
 const LOGOS = [
@@ -57,21 +58,30 @@ const Mark = (px: number) => (
 	</svg>
 );
 
-function BrandBody(this: { oklch: boolean; copied: string; logoMessage: string; colorMessage: string; typeMessage: string }) {
+function BrandBody(this: { oklch: boolean; copied: string; logoMessage: string; colorMessage: string; typeMessage: string }, cx: any) {
 	this.oklch = false;
 	this.copied = "";
 	this.logoMessage = "";
 	this.colorMessage = "";
 	this.typeMessage = "";
-	let timer: ReturnType<typeof setTimeout>;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	cx.mount = () => {
+		onLeave(cx.root, () => clearTimeout(timer));
+	};
+	const clearMessages = () => {
+		this.logoMessage = "";
+		this.colorMessage = "";
+		this.typeMessage = "";
+	};
 	const done = (key: string, field: "logoMessage" | "colorMessage" | "typeMessage", message: string) => {
 		clearTimeout(timer);
+		clearMessages();
 		this.copied = key;
 		this[field] = message;
 		play("success");
 		timer = setTimeout(() => {
 			this.copied = "";
-			this[field] = "";
+			clearMessages();
 		}, 1600);
 	};
 	const fail = (field: "logoMessage" | "colorMessage" | "typeMessage") => {
@@ -141,7 +151,7 @@ function BrandBody(this: { oklch: boolean; copied: string; logoMessage: string; 
 						<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -11.5 48 48" width="136" height="136" aria-hidden="true">
 							<rect class="brand-space-zone" x="-11" y="-10.5" width="46" height="46" />
 							<rect class="brand-space-bounds" x="0.5" y="1" width="23" height="23" />
-							<path class="brand-space-measure" d="m-11 12.5h0.5" />
+							<path class="brand-space-measure" d="M-11 12.5H0.5" />
 							<path fill-rule="evenodd" d={MARK} fill="currentColor" />
 						</svg>
 						<figcaption class="small muted">{b.space.caption}</figcaption>

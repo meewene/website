@@ -1,6 +1,8 @@
 import { css } from "dreamland/core";
 import { Icon } from "../icons";
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "id";
+
 const control = `
 	border-radius: var(--radius-md);
 	min-width: 48px;
@@ -162,7 +164,7 @@ Label.style = css`
 `;
 
 export function Input(this: { id?: string; placeholder?: string; multiline?: boolean; onfocus?: () => void }) {
-	return this.multiline ? <textarea id={this.id} placeholder={this.placeholder} /> : <input id={this.id} placeholder={this.placeholder} on:focus={() => this.onfocus?.()} />;
+	return this.multiline ? <textarea id={this.id} placeholder={this.placeholder} on:focus={() => this.onfocus?.()} /> : <input id={this.id} placeholder={this.placeholder} on:focus={() => this.onfocus?.()} />;
 }
 
 Input.style = css`
@@ -424,18 +426,21 @@ export function Select(this: { id?: string; label?: string; value: string; optio
 	const outside = (e: PointerEvent) => {
 		if (popup?.contains(e.target as Node) || this.trigger.contains(e.target as Node)) return;
 		close(false);
-		setTimeout(() => document.activeElement === document.body && this.trigger.focus({ preventScroll: true }));
+		setTimeout(() => document.activeElement === document.body && this.trigger.isConnected && this.trigger.focus({ preventScroll: true }));
 	};
+	const onRoute = () => close(false);
 	const close = (refocus = true) => {
 		if (!popup) return;
 		const el = popup;
 		popup = null;
+		pressed = false;
 		this.open = false;
 		el.setAttribute("data-ending-style", "");
 		el.style.pointerEvents = "none";
 		setTimeout(() => el.remove(), parseFloat(getComputedStyle(el).transitionDuration) * 1000);
 		removeEventListener("pointerdown", outside, true);
-		if (refocus) this.trigger.focus({ preventScroll: true });
+		removeEventListener("routechange", onRoute);
+		if (refocus && this.trigger.isConnected) this.trigger.focus({ preventScroll: true });
 	};
 	const choose = (el: HTMLElement) => {
 		pick(el.dataset.value!);
@@ -496,6 +501,7 @@ export function Select(this: { id?: string; label?: string; value: string; optio
 			if (o && popup === el) choose(o);
 		});
 		addEventListener("pointerdown", outside, true);
+		addEventListener("routechange", onRoute);
 		requestAnimationFrame(() => el.removeAttribute("data-starting-style"));
 		highlight(items().find((i) => i.dataset.value === this.value) ?? items()[0]);
 	};
@@ -514,7 +520,9 @@ export function Select(this: { id?: string; label?: string; value: string; optio
 				if (e.pointerType !== "mouse" || e.button) return;
 				e.preventDefault();
 				pressed = true;
-				addEventListener("pointerup", () => setTimeout(() => (pressed = false)), { once: true });
+				const release = () => setTimeout(() => (pressed = false));
+				addEventListener("pointerup", release, { once: true });
+				addEventListener("pointercancel", release, { once: true });
 				toggle();
 			}}
 			on:click={() => !pressed && toggle()}
@@ -677,8 +685,9 @@ Progress.style = css`
 	}
 `;
 
-export function Tabs(this: { tabs: Option[]; label: string; active: number }) {
+export function Tabs(this: { id?: string; tabs: Option[]; label: string; active: number }) {
 	this.active = 0;
+	const prefix = `tabs-${slug(this.id || this.label)}`;
 	const rove = (tab: HTMLElement) => {
 		const all = tab.parentElement!.querySelectorAll<HTMLElement>("[role=tab]");
 		all.forEach((t) => t.setAttribute("tabindex", t === tab ? "0" : "-1"));
@@ -700,8 +709,8 @@ export function Tabs(this: { tabs: Option[]; label: string; active: number }) {
 					<button
 						type="button"
 						role="tab"
-						id={`tab-${name}`}
-						aria-controls={`tabpanel-${name}`}
+						id={`${prefix}-tab-${i}`}
+						aria-controls={`${prefix}-panel-${i}`}
 						aria-selected={use(this.active).map((a) => String(a === i))}
 						tabindex={i ? "-1" : "0"}
 						on:click={(e: MouseEvent) => {
@@ -715,8 +724,8 @@ export function Tabs(this: { tabs: Option[]; label: string; active: number }) {
 				))}
 				<span class="indicator" />
 			</div>
-			{this.tabs.map(([name, text], i) => (
-				<div role="tabpanel" id={`tabpanel-${name}`} aria-labelledby={`tab-${name}`} tabindex="0" hidden={use(this.active).map((a) => a !== i)}>
+			{this.tabs.map(([, text], i) => (
+				<div role="tabpanel" id={`${prefix}-panel-${i}`} aria-labelledby={`${prefix}-tab-${i}`} tabindex="0" hidden={use(this.active).map((a) => a !== i)}>
 					{text}
 				</div>
 			))}
@@ -769,10 +778,17 @@ Tabs.style = css`
 	}
 `;
 
-export function Dialog(this: { trigger: string; title: string; description: string; close: string; open: boolean; dialog: HTMLDialogElement }) {
+export function Dialog(this: { id?: string; trigger: string; title: string; description: string; close: string; open: boolean; dialog: HTMLDialogElement }) {
 	this.open = false;
+	const prefix = `dialog-${slug(this.id || this.title)}`;
+	const titleId = `${prefix}-title`;
+	const descId = `${prefix}-description`;
+	let closeTimer: ReturnType<typeof setTimeout> | undefined;
 	const show = () => {
 		const d = this.dialog;
+		clearTimeout(closeTimer);
+		d.removeAttribute("data-ending-style");
+		if (d.open) d.close();
 		d.setAttribute("data-starting-style", "");
 		d.showModal();
 		this.open = true;
@@ -782,20 +798,23 @@ export function Dialog(this: { trigger: string; title: string; description: stri
 		const d = this.dialog;
 		if (!this.open) return;
 		this.open = false;
+		clearTimeout(closeTimer);
 		d.setAttribute("data-ending-style", "");
-		setTimeout(() => {
-			d.close();
+		closeTimer = setTimeout(() => {
+			if (d.open) d.close();
 			d.removeAttribute("data-ending-style");
 		}, parseFloat(getComputedStyle(d).transitionDuration) * 1000);
 	};
 	const outside = (e: MouseEvent) => {
+		if (e.target !== this.dialog) return;
 		const r = this.dialog.getBoundingClientRect();
 		if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) hide();
 	};
 	const trap = (e: KeyboardEvent) => {
 		if (e.key !== "Tab") return;
+		const all = [...this.dialog.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+		if (!all.length) return;
 		e.preventDefault();
-		const all = [...this.dialog.querySelectorAll<HTMLElement>("button")];
 		all[(all.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? all.length - 1 : 1)) % all.length].focus();
 	};
 	return (
@@ -803,10 +822,10 @@ export function Dialog(this: { trigger: string; title: string; description: stri
 			<Button popup="dialog" expanded={use(this.open)} onclick={show}>
 				{this.trigger}
 			</Button>
-			<dialog aria-labelledby="dialog-title" aria-describedby="dialog-description" this={use(this.dialog)} on:cancel={(e: Event) => (e.preventDefault(), hide())} on:click={outside} on:keydown={trap}>
+			<dialog aria-labelledby={titleId} aria-describedby={descId} this={use(this.dialog)} on:cancel={(e: Event) => (e.preventDefault(), hide())} on:click={outside} on:keydown={trap}>
 				<div class="copy">
-					<h2 id="dialog-title">{this.title}</h2>
-					<p id="dialog-description">{this.description}</p>
+					<h2 id={titleId}>{this.title}</h2>
+					<p id={descId}>{this.description}</p>
 				</div>
 				<Button onclick={hide}>{this.close}</Button>
 			</dialog>
@@ -933,8 +952,14 @@ Range.style = css`
 		border: 0;
 		border-radius: 9999px;
 		background: radial-gradient(circle, var(--background) 7px, var(--foreground) 7.5px 8px, transparent 8.5px);
+		outline: var(--focus-width) solid transparent;
+		outline-offset: calc(var(--focus-width) * -1 - 12px);
+		transition: outline-color var(--control-duration) var(--control-ease);
 	}
 	:scope:focus-visible::-webkit-slider-thumb {
+		outline-color: var(--ring);
+	}
+	:scope:focus-visible::-moz-range-thumb {
 		outline-color: var(--ring);
 	}
 `;

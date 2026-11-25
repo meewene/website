@@ -4,6 +4,7 @@ import { Page } from "../components/Page";
 import { Button, Checkbox, Dialog, Input, Label, Playground, Progress, RadioGroup, Range, Select, Switch, Tabs } from "../components/Controls";
 import { Icon } from "../icons";
 import { motion } from "../motion";
+import { onLeave } from "../nav";
 
 const d = config.pages.design;
 const PAIRS: [string, string, string, number][] = [
@@ -56,8 +57,16 @@ function DesignBody(this: { ratios: string[]; verdicts: string[]; moved: boolean
 				return min ? `${r >= min ? "passes" : "below"} ${min}:1` : "decorative";
 			});
 		};
+		let lastDark = document.documentElement.classList.contains("dark");
 		measure();
-		new MutationObserver(measure).observe(document.documentElement, { attributeFilter: ["class"] });
+		const observer = new MutationObserver(() => {
+			const dark = document.documentElement.classList.contains("dark");
+			if (dark === lastDark) return;
+			lastDark = dark;
+			measure();
+		});
+		observer.observe(document.documentElement, { attributeFilter: ["class"] });
+		onLeave(this.probe, () => observer.disconnect());
 	};
 	const compare = () => {
 		this.moved = !this.moved;

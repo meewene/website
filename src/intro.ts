@@ -1,7 +1,17 @@
 import { createState } from "dreamland/core";
 import { motion } from "./motion";
+import { clean } from "./routes";
 
 export const intro = createState({ phase: "pending" });
+
+const phaseListeners = new Set<(phase: string) => void>();
+
+export const onIntroPhase = (fn: (phase: string) => void) => {
+	phaseListeners.add(fn);
+	return () => {
+		phaseListeners.delete(fn);
+	};
+};
 
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 const controls = { transform: "translateX(8px) scale(0.95, 1)", filter: "blur(4px)", duration: 320, stagger: 60 };
@@ -23,13 +33,15 @@ export const runIntro = (root: HTMLElement | null) => {
 	const setPhase = (phase: string) => {
 		intro.phase = phase;
 		root?.setAttribute("data-page-intro", phase);
+		for (const fn of phaseListeners) fn(phase);
 	};
 	setPhase("pending");
 	if (!root || motion.reduced || root.contains(document.activeElement)) {
 		html.removeAttribute("data-intro-boot");
 		return setPhase("skipped");
 	}
-	if ((firstPath ??= location.pathname) !== location.pathname) navigated = true;
+	const current = clean(location.pathname);
+	if ((firstPath ??= current) !== current) navigated = true;
 	const all = [...root.querySelectorAll<HTMLElement>("[data-intro], [data-intro-group] > *, [data-intro-controls] > button")].filter(
 		(el) => !el.hasAttribute("data-intro-group") && !(navigated && el.closest("header")) && el.getClientRects().length > 0,
 	);
@@ -40,8 +52,10 @@ export const runIntro = (root: HTMLElement | null) => {
 	}
 	const isControl = (el: HTMLElement) => el.parentElement?.hasAttribute("data-intro-controls");
 	const explicit = (el: HTMLElement) => {
-		const n = Number(el.dataset.introDelay);
-		return el.dataset.introDelay !== undefined && n >= 0 ? n : null;
+		const raw = el.dataset.introDelay;
+		if (!raw) return null;
+		const n = Number(raw);
+		return Number.isFinite(n) && n >= 0 ? n : null;
 	};
 	const inView = (el: HTMLElement) => el.getBoundingClientRect().top < innerHeight;
 	const count = items.filter((el) => !isControl(el) && explicit(el) === null && inView(el)).length;
@@ -52,12 +66,13 @@ export const runIntro = (root: HTMLElement | null) => {
 		const kind = navigated ? quick : group ? controls : kinds[el.dataset.intro!] || kinds.default;
 		const fancy = group && !navigated;
 		const blur = kind === kinds.default ? "blur(2px)" : fancy ? controls.filter : undefined;
+		const explicitDelay = explicit(el);
 		const delay = navigated
 			? 0
 			: group
 				? (group.length - 1 - group.indexOf(el)) * controls.stagger
-				: explicit(el) !== null
-					? Math.min(explicit(el)!, 900 - kind.duration)
+				: explicitDelay !== null
+					? Math.min(explicitDelay, Math.max(0, 900 - kind.duration))
 					: (inView(el) ? order++ : Math.max(order - 1, 0)) * step;
 		const origin = fancy ? { transformOrigin: "right center" } : {};
 		return el.animate(

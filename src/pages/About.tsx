@@ -8,12 +8,12 @@ const a = config.pages.about;
 function AboutBody() {
 	return (
 		<div class="page-content about-page">
-			<div class="page-prose">
+			<div data-intro-group="true" class="page-prose">
 				{a.intro.map((p) => (
 					<p>{p}</p>
 				))}
 			</div>
-			<div class="about-contact">
+			<div data-intro="true" class="about-contact">
 				<p>{a.contact}</p>
 				<a class="page-link about-contact-link" href="/contact">
 					{a.contactLink}
@@ -44,7 +44,7 @@ AboutBody.style = css`
 		font-size: var(--type-body);
 	}
 	.about-contact-link svg {
-		transition: translate 0.24s var(--expo-out);
+		transition: translate var(--control-duration) var(--expo-out);
 	}
 	@media (hover: hover) and (pointer: fine) {
 		.about-contact-link:hover svg {

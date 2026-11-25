@@ -1,19 +1,21 @@
-import { css, stateListen } from "dreamland/core";
+import { css } from "dreamland/core";
 import config from "../site.config";
 import { Page } from "../components/Page";
 import { Button, Checkbox, Input, Label, Playground, Range, Select, Switch } from "../components/Controls";
 import { Icon } from "../icons";
-import { cueLength, hoverAllowed, play, sound, stop, type Cue } from "../sound";
+import { cueLength, hoverAllowed, onSoundChange, play, sound, stop, type Cue } from "../sound";
 import { motion } from "../motion";
+import { onLeave } from "../nav";
 
 const c = config.pages.sounds;
 
-function Lab(this: { playing: string; selected: string; result: string; panel: HTMLElement; open: boolean }) {
+function Lab(this: { playing: string; selected: string; result: string; panel: HTMLElement; open: boolean }, cx: any) {
 	this.playing = "";
 	this.selected = "";
 	this.result = "idle";
 	this.open = false;
-	let timer: ReturnType<typeof setTimeout>;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let disclosureAnim: Animation | undefined;
 	const onplay = (cue: Cue) => {
 		clearTimeout(timer);
 		if (this.playing === cue) {
@@ -27,21 +29,48 @@ function Lab(this: { playing: string; selected: string; result: string; panel: H
 		this.playing = this.result === "played" ? cue : "";
 		if (this.playing) timer = setTimeout(() => (this.playing = ""), cueLength(cue));
 	};
-	stateListen(sound, () => {
-		clearTimeout(timer);
-		this.playing = "";
-		this.result = "idle";
-	});
+	cx.mount = () => {
+		const unsubSound = onSoundChange(() => {
+			clearTimeout(timer);
+			this.playing = "";
+			this.result = "idle";
+		});
+		onLeave(cx.root, () => {
+			clearTimeout(timer);
+			disclosureAnim?.cancel();
+			unsubSound();
+		});
+	};
 	const status = use(sound.enabled, sound.volume, this.selected, this.result).map(([on, volume, selected, result]) =>
 		!on ? "sound is off." : !volume ? "volume is at zero." : result === "unavailable" ? "audio couldn’t start." : result === "muted" ? "playback stopped." : selected ? `selected ${selected}.` : "",
 	);
 	const toggle = () => {
 		this.open = !this.open;
 		const panel = this.panel;
-		if (this.open) panel.hidden = false;
-		const frames = [{ height: "0px", opacity: 0 }, { height: `${panel.scrollHeight}px`, opacity: 1 }];
-		if (motion.reduced) return void (panel.hidden = !this.open);
-		panel.animate(this.open ? frames : frames.reverse(), { duration: 300, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }).finished.then(() => (panel.hidden = !this.open));
+		disclosureAnim?.cancel();
+		if (motion.reduced) {
+			panel.hidden = !this.open;
+			return;
+		}
+		const fromHeight = panel.hidden ? 0 : panel.getBoundingClientRect().height;
+		panel.hidden = false;
+		const toHeight = this.open ? panel.scrollHeight : 0;
+		const fromOpacity = this.open ? 0 : 1;
+		const toOpacity = this.open ? 1 : 0;
+		const targetOpen = this.open;
+		disclosureAnim = panel.animate(
+			[
+				{ height: `${fromHeight}px`, opacity: fromOpacity },
+				{ height: `${toHeight}px`, opacity: toOpacity },
+			],
+			{ duration: 300, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+		);
+		disclosureAnim.finished.then(
+			() => {
+				if (this.open === targetOpen) panel.hidden = !targetOpen;
+			},
+			() => {},
+		);
 	};
 	return (
 		<div>
@@ -131,10 +160,16 @@ function Lab(this: { playing: string; selected: string; result: string; panel: H
 	);
 }
 
-function Panel(this: { onplay: (cue: Cue) => void; busy: boolean; result: string }) {
+function Panel(this: { onplay: (cue: Cue) => void; busy: boolean; result: string }, cx: any) {
 	this.busy = false;
 	this.result = "success";
 	let pending: ReturnType<typeof setTimeout> | undefined;
+	cx.mount = () => {
+		onLeave(cx.root, () => {
+			clearTimeout(pending);
+			pending = undefined;
+		});
+	};
 	const submit = () => {
 		if (pending) return;
 		this.busy = true;
@@ -251,7 +286,7 @@ Lab.style = css`
 		width: 7rem;
 	}
 	.percent {
-		width: 2rem;
+		min-width: 4ch;
 		color: var(--muted-foreground);
 		font-family: var(--font-mono);
 		font-feature-settings: var(--font-mono-features);
@@ -406,6 +441,12 @@ Lab.style = css`
 	}
 	.play:focus-visible {
 		outline: none;
+	}
+	@media (forced-colors: active) {
+		.play:focus-visible {
+			outline: var(--focus-width) solid highlight;
+			outline-offset: calc(var(--focus-width) * -1);
+		}
 	}
 	@media (hover: hover) and (pointer: fine) {
 		.sound-row:hover .play::before {

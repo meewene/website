@@ -5,7 +5,7 @@ export const selectionInk = () => {
 	const forced = matchMedia("(forced-colors: active)");
 	const root = document.documentElement;
 	let run = 0;
-	let stop: (() => void) | undefined;
+	let stop: ((keepClass?: boolean) => void) | undefined;
 	const options = () => {
 		const dark = root.classList.contains("dark");
 		return {
@@ -20,26 +20,39 @@ export const selectionInk = () => {
 			ink: { feathering: 0.15, flow: 0.5 },
 		} as any;
 	};
-	const start = async () => {
+	const start = async (keepClass = false) => {
 		const id = ++run;
-		stop?.();
+		const eligible = fine.matches && !forced.matches;
+		stop?.(keepClass && eligible);
 		stop = undefined;
-		if (!fine.matches || forced.matches) return;
+		if (!eligible) {
+			root.classList.remove("selection-ink-ready");
+			return;
+		}
 		try {
 			const { highlightSelection } = await import("@highlighters/core");
 			if (id !== run || !fine.matches || forced.matches) return;
 			const ink = highlightSelection(options());
-			const watch = new MutationObserver(() => ink.update(options()));
-			watch.observe(root, { attributes: true, attributeFilter: ["class"] });
+			let lastDark = root.classList.contains("dark");
+			let lastReduced = motion.reduced;
 			root.classList.add("selection-ink-ready");
-			stop = () => {
+			const watch = new MutationObserver(() => {
+				const dark = root.classList.contains("dark");
+				const reduced = motion.reduced;
+				if (dark === lastDark && reduced === lastReduced) return;
+				lastDark = dark;
+				lastReduced = reduced;
+				ink.update(options());
+			});
+			watch.observe(root, { attributes: true, attributeFilter: ["class"] });
+			stop = (preserve = false) => {
 				watch.disconnect();
 				ink.remove();
-				root.classList.remove("selection-ink-ready");
+				if (!preserve) root.classList.remove("selection-ink-ready");
 			};
 		} catch {}
 	};
 	start();
-	[fine, forced].forEach((q) => q.addEventListener("change", start));
-	addEventListener("routechange", start);
+	[fine, forced].forEach((q) => q.addEventListener("change", () => start(false)));
+	addEventListener("routechange", () => start(true));
 };
